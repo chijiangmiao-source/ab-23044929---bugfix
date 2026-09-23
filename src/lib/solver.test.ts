@@ -21,6 +21,8 @@ function bruteForce(values: number[]): {
   distance: number;
   total: number;
   lexicographicMin: InversionStep[];
+  /** 全部最短方案，按 (start,end) 序列字典序排列（DFS 按 (i,j) 序枚举） */
+  paths: InversionStep[][];
 } {
   const n = values.length;
   const start = tokensOf(values);
@@ -54,10 +56,12 @@ function bruteForce(values: number[]): {
   // DFS 只走能保持最短性的边，枚举全部最短方案（n<=3 时规模很小）
   let total = 0;
   let lexicographicMin: InversionStep[] | null = null;
+  const paths: InversionStep[][] = [];
   const walk = (tokens: number[], d: number[], path: InversionStep[]) => {
     const code = encodeState(tokens);
     if (code === goalCode) {
       total += 1;
+      paths.push(path.slice());
       if (
         lexicographicMin === null ||
         lexicographicLess(path, lexicographicMin)
@@ -79,7 +83,7 @@ function bruteForce(values: number[]): {
     }
   };
   walk(start, [], []);
-  return { distance, total, lexicographicMin: lexicographicMin! };
+  return { distance, total, lexicographicMin: lexicographicMin!, paths };
 }
 
 function lexicographicLess(a: InversionStep[], b: InversionStep[]) {
@@ -114,6 +118,133 @@ describe('需求用例 [1,-3,-2,4]', () => {
     expect(r.totalPaths).toBe(1n);
     expect(r.canonical.steps).toEqual([{ start: 2, end: 3 }]);
     expect(signedOf(r.canonical.states[1])).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('需求场景：恰有两条最短方案的 4 标记排列', () => {
+  it('[1,4,3,2]：3 步、2 条方案，规范轨迹 2-3 / 3-4 / 2-3，矩阵逐层仅 2-3 与 3-4 各一次', () => {
+    const r = solve(tokensOf([1, 4, 3, 2]));
+    expect(r.distance).toBe(3);
+    expect(r.totalPaths).toBe(2n);
+    expect(r.canonical.steps).toEqual([
+      { start: 2, end: 3 },
+      { start: 3, end: 4 },
+      { start: 2, end: 3 },
+    ]);
+    // 规范轨迹逐步执行后必须到达全正顺序
+    expect(r.canonical.states.map(signedOf)).toEqual([
+      [1, 4, 3, 2],
+      [1, -3, -4, 2],
+      [1, -3, -2, 4],
+      [1, 2, 3, 4],
+    ]);
+
+    // 暴力枚举锁定完整方案集：另一条等长方案为 3-4 / 2-3 / 3-4
+    const b = bruteForce([1, 4, 3, 2]);
+    expect(b.distance).toBe(3);
+    expect(b.paths).toEqual([
+      [
+        { start: 2, end: 3 },
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+      ],
+      [
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+        { start: 3, end: 4 },
+      ],
+    ]);
+    expect(r.canonical.steps).toEqual(b.paths[0]);
+
+    // 矩阵每一层都只有 2-3 与 3-4 各出现一次（部分方案），其余区间从未出现
+    expect(r.matrix.length).toBe(3);
+    for (const layer of r.matrix) {
+      for (const cell of layer.intervals) {
+        const onShortest =
+          (cell.start === 2 && cell.end === 3) ||
+          (cell.start === 3 && cell.end === 4);
+        if (onShortest) {
+          expect(cell.pathCount).toBe(1n);
+          expect(cell.presence).toBe('some');
+        } else {
+          expect(cell.pathCount).toBe(0n);
+          expect(cell.presence).toBe('none');
+        }
+      }
+    }
+  });
+
+  it('[3,-1,-4,2]：多条最短前缀汇入同一步，第三层 2-3 计数为 2 且全部方案共用', () => {
+    const r = solve(tokensOf([3, -1, -4, 2]));
+    expect(r.distance).toBe(3);
+    expect(r.totalPaths).toBe(2n);
+    expect(r.canonical.steps).toEqual([
+      { start: 1, end: 2 },
+      { start: 3, end: 4 },
+      { start: 2, end: 3 },
+    ]);
+
+    // 完整方案集：规范 1-2 / 3-4 / 2-3，替代 3-4 / 1-2 / 2-3
+    const b = bruteForce([3, -1, -4, 2]);
+    expect(b.paths).toEqual([
+      [
+        { start: 1, end: 2 },
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+      ],
+      [
+        { start: 3, end: 4 },
+        { start: 1, end: 2 },
+        { start: 2, end: 3 },
+      ],
+    ]);
+
+    expect(r.matrix.length).toBe(3);
+    // 前两层：1-2 与 3-4 各出现一次（两条方案在前两步互换顺序）
+    for (const d of [0, 1]) {
+      for (const cell of r.matrix[d].intervals) {
+        const swapped =
+          (cell.start === 1 && cell.end === 2) ||
+          (cell.start === 3 && cell.end === 4);
+        if (swapped) {
+          expect(cell.pathCount).toBe(1n);
+          expect(cell.presence).toBe('some');
+        } else {
+          expect(cell.pathCount).toBe(0n);
+          expect(cell.presence).toBe('none');
+        }
+      }
+    }
+    // 第三层：两条前缀汇入同一倒位 2-3，计数 2 且为全部方案共用
+    for (const cell of r.matrix[2].intervals) {
+      if (cell.start === 2 && cell.end === 3) {
+        expect(cell.pathCount).toBe(2n);
+        expect(cell.presence).toBe('all');
+      } else {
+        expect(cell.pathCount).toBe(0n);
+        expect(cell.presence).toBe('none');
+      }
+    }
+  });
+});
+
+describe('需求场景：七标记排列 [2,1,3,6,4,7,5]', () => {
+  it('距离 8、最短方案总数 120174，矩阵每行计数之和均等于该总数', () => {
+    const r = solve(tokensOf([2, 1, 3, 6, 4, 7, 5]));
+    expect(r.distance).toBe(8);
+    expect(r.totalPaths).toBe(120174n);
+    expect(r.matrix.length).toBe(8);
+    for (const layer of r.matrix) {
+      let sum = 0n;
+      for (const cell of layer.intervals) sum += cell.pathCount;
+      expect(sum).toBe(120174n);
+    }
+    // 规范方案本身可行：逐步执行后到达全正顺序
+    let cur = tokensOf([2, 1, 3, 6, 4, 7, 5]);
+    for (const s of r.canonical.steps) {
+      cur = applyInversion(cur, s.start - 1, s.end - 1);
+    }
+    expect(signedOf(cur)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

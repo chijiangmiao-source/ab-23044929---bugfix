@@ -11,6 +11,20 @@
  *   - 方案总数（bigint 任意精度累加，按十进制展示）；
  *   - 规范方案：全部最短方案中按“每步 (start,end) 序列”字典序最小者；
  *   - 深度×区间矩阵：逐格统计该倒位在多少最短方案的该深度出现。
+ *
+ * 算法（全部为精确的最短路径 DAG 计算，无任何贪心近似）：
+ *   1) 前向 BFS（标准 FIFO 队列，邻居按 (start,end) 字典序枚举）：
+ *      首次到达即最短距离 distF；每个状态的首条父边构成字典序最小的
+ *      最短方案树，沿目标态回溯即规范方案；
+ *   2) 反向 BFS（倒位自逆，枚举相同）：只保留位于某条最短路径上的状态
+ *      （distF(u) + distR(u) === distance），得到 distR；
+ *   3) 在最短路径 DAG 上分层做双向 DP（bigint）：
+ *      waysFromStart(u) = 初始态到 u 的最短方案数，
+ *      waysToGoal(v)    = v 到目标态的最短方案数；
+ *   4) 深度×区间矩阵：DAG 边 (u,v) 在深度 d 的方案数为
+ *      waysFromStart(u) × waysToGoal(v)，按区间聚合到矩阵格。
+ *      每行各格之和恰为方案总数；多条最短前缀汇入同一状态时，
+ *      其方案数在 waysFromStart 中自然累加，后续各层计数随之精确。
  */
 
 import { decodeState, encodeState, type Token } from './permutation';
@@ -83,66 +97,6 @@ function identityCode(n: number): number {
   return code;
 }
 
-interface FrontierEntry {
-  code: number;
-  breakpoints: number;
-  order: number;
-}
-
-function breakpointCount(code: number, n: number): number {
-  let count = 0;
-  let previous = 0;
-  for (let k = 0; k < n; k += 1) {
-    const token = ((code >>> (4 * k)) & 0x0f) - 1;
-    const magnitude = (token >> 1) + 1;
-    const value = (token & 1) === 0 ? magnitude : -magnitude;
-    if (value !== previous + 1) count += 1;
-    previous = value;
-  }
-  if (previous !== n) count += 1;
-  return count;
-}
-
-function frontierLess(a: FrontierEntry, b: FrontierEntry): boolean {
-  return a.breakpoints !== b.breakpoints
-    ? a.breakpoints < b.breakpoints
-    : a.order < b.order;
-}
-
-function frontierPush(heap: FrontierEntry[], entry: FrontierEntry): void {
-  let index = heap.length;
-  heap.push(entry);
-  while (index > 0) {
-    const parentIndex = (index - 1) >> 1;
-    if (!frontierLess(entry, heap[parentIndex])) break;
-    heap[index] = heap[parentIndex];
-    index = parentIndex;
-  }
-  heap[index] = entry;
-}
-
-function frontierPop(heap: FrontierEntry[]): FrontierEntry {
-  const first = heap[0];
-  const last = heap.pop()!;
-  if (heap.length === 0) return first;
-
-  let index = 0;
-  while (true) {
-    const left = index * 2 + 1;
-    if (left >= heap.length) break;
-    const right = left + 1;
-    const child =
-      right < heap.length && frontierLess(heap[right], heap[left])
-        ? right
-        : left;
-    if (!frontierLess(heap[child], last)) break;
-    heap[index] = heap[child];
-    index = child;
-  }
-  heap[index] = last;
-  return first;
-}
-
 export function solve(initial: Token[]): AuditResult {
   const n = initial.length;
   const goalCode = identityCode(n);
@@ -161,34 +115,24 @@ export function solve(initial: Token[]): AuditResult {
   }
 
   /* ------------------------------------------------------------------ *
-   * 1) 前向 BFS：distF（初始态 -> 各态）与规范父边。
-   *    邻居按 (start,end) 字典序枚举，首次到达的父边即字典序最早者，
-   *    沿它回溯得到规范方案。
+   * 1) 前向 BFS：distF（初始态 -> 各态的最短距离）与规范父边。
+   *    标准 FIFO 队列按层推进；邻居按 (start,end) 字典序枚举，
+   *    首次到达的父边即字典序最早者，沿它回溯得到规范方案。
    * ------------------------------------------------------------------ */
   const distF = new Map<number, number>();
   const parent = new Map<number, { code: number; start: number; end: number }>();
   {
-    const queue: FrontierEntry[] = [];
-    let order = 0;
-    frontierPush(queue, {
-      code: startCode,
-      breakpoints: breakpointCount(startCode, n),
-      order: order++,
-    });
+    const queue: number[] = [startCode];
     distF.set(startCode, 0);
-    while (queue.length > 0) {
-      const { code } = frontierPop(queue);
+    for (let head = 0; head < queue.length; head += 1) {
+      const code = queue[head];
+      if (code === goalCode) break; // 按层出队，目标出队时其所在层已全部发现
       const d = distF.get(code)!;
-      if (code === goalCode) break; // 队列按层推进，到达目标即最短层
       eachNeighbor(code, n, (nextCode, start, end) => {
         if (!distF.has(nextCode)) {
           distF.set(nextCode, d + 1);
           parent.set(nextCode, { code, start, end });
-          frontierPush(queue, {
-            code: nextCode,
-            breakpoints: breakpointCount(nextCode, n),
-            order: order++,
-          });
+          queue.push(nextCode);
         }
       });
     }
@@ -198,32 +142,84 @@ export function solve(initial: Token[]): AuditResult {
 
   /* ------------------------------------------------------------------ *
    * 2) 反向 BFS（倒位自逆，邻居枚举相同），只保留位于某条最短路径上
-   *    的状态（distF <= distance）。分层汇总 waysToGoal：
-   *    v 到目标的最短路径条数。
+   *    的状态：distF(u) + distR(u) === distance。
+   *    （distF 已是最短距离，distF(u)+distR(u) 不可能小于 distance，
+   *    故筛选条件恰好圈出全部最短路径 DAG 上的状态。）
    * ------------------------------------------------------------------ */
-  const routes: InversionStep[][] = [];
-  eachNeighbor(goalCode, n, (previousCode, finalStart, finalEnd) => {
-    if (distF.get(previousCode) !== distance - 1) return;
-
-    const reversed: InversionStep[] = [
-      { start: finalStart, end: finalEnd },
-    ];
-    let cursor = previousCode;
-    while (cursor !== startCode) {
-      const p = parent.get(cursor)!;
-      reversed.push({ start: p.start, end: p.end });
-      cursor = p.code;
+  const distR = new Map<number, number>();
+  {
+    const queue: number[] = [goalCode];
+    distR.set(goalCode, 0);
+    for (let head = 0; head < queue.length; head += 1) {
+      const code = queue[head];
+      const d = distR.get(code)!;
+      eachNeighbor(code, n, (nextCode) => {
+        if (distR.has(nextCode)) return;
+        const df = distF.get(nextCode);
+        if (df === undefined || df + d + 1 > distance) return;
+        distR.set(nextCode, d + 1);
+        queue.push(nextCode);
+      });
     }
-    reversed.reverse();
-    routes.push(reversed);
-  });
-
-  const totalPaths = BigInt(routes.length);
+  }
 
   /* ------------------------------------------------------------------ *
-   * 3) 逐层枚举最短边 (u,v)：distF[u]=d、distR[v]=distance-d-1。
-   *    边方案数 = waysFromStart(u) * waysToGoal(v)，按区间聚合到矩阵格；
-   *    waysFromStart 随层滚动。
+   * 3) 最短路径 DAG 分层：byLayer[d] 为 distF = d 的 DAG 状态
+   *    （按前向 BFS 发现序，天然满足层间拓扑序）。
+   * ------------------------------------------------------------------ */
+  const byLayer: number[][] = [];
+  for (let d = 0; d <= distance; d += 1) byLayer.push([]);
+  for (const [code, d] of distF) {
+    if (distR.has(code)) byLayer[d].push(code);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 4) 前向分层 DP：waysFromStart(u) = 初始态到 u 的最短方案数。
+   *    多条最短前缀汇入同一状态时在此自然累加。
+   * ------------------------------------------------------------------ */
+  const waysFromStart = new Map<number, bigint>();
+  waysFromStart.set(startCode, 1n);
+  for (let d = 0; d < distance; d += 1) {
+    for (const code of byLayer[d]) {
+      const ways = waysFromStart.get(code) ?? 0n;
+      if (ways === 0n) continue;
+      eachNeighbor(code, n, (nextCode) => {
+        if (distF.get(nextCode) === d + 1 && distR.has(nextCode)) {
+          waysFromStart.set(
+            nextCode,
+            (waysFromStart.get(nextCode) ?? 0n) + ways,
+          );
+        }
+      });
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 5) 反向分层 DP：waysToGoal(v) = v 到目标态的最短方案数。
+   * ------------------------------------------------------------------ */
+  const waysToGoal = new Map<number, bigint>();
+  waysToGoal.set(goalCode, 1n);
+  for (let d = distance; d > 0; d -= 1) {
+    for (const code of byLayer[d]) {
+      const ways = waysToGoal.get(code) ?? 0n;
+      if (ways === 0n) continue;
+      eachNeighbor(code, n, (nextCode) => {
+        if (distF.get(nextCode) === d - 1 && distR.has(nextCode)) {
+          waysToGoal.set(
+            nextCode,
+            (waysToGoal.get(nextCode) ?? 0n) + ways,
+          );
+        }
+      });
+    }
+  }
+
+  const totalPaths = waysFromStart.get(goalCode)!;
+
+  /* ------------------------------------------------------------------ *
+   * 6) 逐层枚举最短 DAG 边 (u,v)：distF[u]=d、distF[v]=d+1。
+   *    边方案数 = waysFromStart(u) × waysToGoal(v)，按区间聚合到矩阵格；
+   *    每行各格之和恰为方案总数。
    * ------------------------------------------------------------------ */
   const matrix: AuditResult['matrix'] = [];
   // 全部区间按 (start,end) 字典序预登记，任何最短方案都没用到的保持 none。
@@ -236,17 +232,20 @@ export function solve(initial: Token[]): AuditResult {
 
   for (let d = 0; d < distance; d += 1) {
     const counts = new Map<string, bigint>();
-    for (const { start, end } of allIntervals) {
-      counts.set(`${start}:${end}`, 0n);
-    }
-    for (const route of routes) {
-      const step = route[d];
-      const key = `${step.start}:${step.end}`;
-      counts.set(key, counts.get(key)! + 1n);
+    for (const code of byLayer[d]) {
+      const prefix = waysFromStart.get(code) ?? 0n;
+      if (prefix === 0n) continue;
+      eachNeighbor(code, n, (nextCode, start, end) => {
+        if (distF.get(nextCode) !== d + 1 || !distR.has(nextCode)) return;
+        const suffix = waysToGoal.get(nextCode) ?? 0n;
+        if (suffix === 0n) return;
+        const key = `${start}:${end}`;
+        counts.set(key, (counts.get(key) ?? 0n) + prefix * suffix);
+      });
     }
 
     const intervals: IntervalCell[] = allIntervals.map(({ start, end }) => {
-      const pathCount = counts.get(`${start}:${end}`)!;
+      const pathCount = counts.get(`${start}:${end}`) ?? 0n;
       const presence: CellPresence =
         pathCount === totalPaths ? 'all' : pathCount === 0n ? 'none' : 'some';
       return { start, end, pathCount, presence };
@@ -255,7 +254,7 @@ export function solve(initial: Token[]): AuditResult {
   }
 
   /* ------------------------------------------------------------------ *
-   * 4) 规范路径：沿前向 BFS 的最早父边回溯到初始态，再反序。
+   * 7) 规范路径：沿前向 BFS 的最早父边回溯到初始态，再反序。
    * ------------------------------------------------------------------ */
   const steps: InversionStep[] = [];
   const statesReversed: Token[][] = [decodeState(goalCode, n)];
