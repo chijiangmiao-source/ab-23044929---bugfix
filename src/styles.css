@@ -1,0 +1,400 @@
+:root {
+  --bg: #0f1420;
+  --panel: #181f2e;
+  --panel-2: #1f2839;
+  --border: #2c3850;
+  --text: #e6ebf5;
+  --muted: #93a0b8;
+  --accent: #5aa7ff;
+  --all: #2fbf71;
+  --some: #e5a93d;
+  --none: #3a4358;
+  --danger-bg: #3a1d24;
+  --danger-border: #7c3242;
+  --danger-text: #ffb4c0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  margin: 0 0 6px;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 0 0 20px;
+  font-size: 0.92rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+
+.card h2 {
+  font-size: 1.08rem;
+  margin: 0 0 8px;
+}
+
+.field-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.perm-input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 1.05rem;
+  resize: vertical;
+}
+
+.perm-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+}
+
+.actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #08111f;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 22px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.alert {
+  margin-top: 14px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.alert ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.82rem;
+}
+
+.summary {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  flex: 1 1 180px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.big {
+  font-size: 1.35rem;
+  word-break: break-all;
+  padding-top: 8px;
+}
+
+.stat-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0 14px;
+}
+
+.stepper button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stepper-pos {
+  font-variant-numeric: tabular-nums;
+}
+
+.scrub {
+  width: 100%;
+  margin-top: 12px;
+  accent-color: var(--accent);
+}
+
+.states {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.state-row {
+  min-width: 200px;
+}
+
+.state-caption {
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.markers {
+  display: flex;
+  gap: 6px;
+}
+
+.marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.marker-pos {
+  color: #9be8b8;
+}
+
+.marker-neg {
+  color: #ffb0bd;
+}
+
+.marker-hit {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: #243049;
+}
+
+.arrow {
+  color: var(--accent);
+  font-family: ui-monospace, Consolas, monospace;
+  font-weight: 700;
+}
+
+.step-hint {
+  margin: 12px 0 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin: 8px 0 12px;
+  font-size: 0.85rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  border: 1px solid var(--border);
+}
+
+.swatch-all { background: var(--all); }
+.swatch-some { background: var(--some); }
+.swatch-none { background: var(--none); }
+.swatch-canonical {
+  background: var(--panel-2);
+  outline: 2px solid #fff;
+  outline-offset: -1px;
+}
+
+.legend-note {
+  color: var(--accent);
+  flex-basis: 100%;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.matrix {
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+.matrix th {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.matrix .corner {
+  text-align: right;
+  padding-right: 8px;
+}
+
+.matrix .rowhead {
+  text-align: right;
+  padding-right: 10px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.cell {
+  width: 76px;
+  height: 46px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  color: #0c1320;
+  font-weight: 700;
+  transition:
+    transform 0.06s ease,
+    opacity 0.1s ease;
+}
+
+.cell:hover {
+  transform: scale(1.06);
+}
+
+.cell-count {
+  display: block;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-all {
+  background: var(--all);
+}
+
+.cell-some {
+  background: var(--some);
+}
+
+.cell-none {
+  background: var(--none);
+  color: #8b96ac;
+}
+
+.cell-canonical {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+
+.cell-selected {
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+.cell-dimmed {
+  opacity: 0.35;
+}
+
+.footer {
+  margin-top: 24px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+code {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+}

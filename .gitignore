@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.npm-cache/
+coverage/
+*.log
+.DS_Store
+.env
