@@ -94,6 +94,57 @@ function lexicographicLess(a: InversionStep[], b: InversionStep[]) {
   return false;
 }
 
+/** 独立枚举全部最短倒位序列（按字典序返回），用于锁定完整方案集合。 */
+function allShortestPaths(values: number[]): InversionStep[][] {
+  const n = values.length;
+  const start = tokensOf(values);
+  const goalCode = encodeState(
+    tokensOf(Array.from({ length: n }, (_, k) => k + 1)),
+  );
+
+  const dist = new Map<number, number>([[encodeState(start), 0]]);
+  const queue = [encodeState(start)];
+  for (let head = 0; head < queue.length; head += 1) {
+    const code = queue[head];
+    const d = dist.get(code)!;
+    if (dist.has(goalCode) && d >= dist.get(goalCode)!) break;
+    const cur: number[] = [];
+    for (let k = 0; k < n; k += 1) cur.push(((code >>> (4 * k)) & 0x0f) - 1);
+    for (let i = 0; i < n; i += 1) {
+      for (let j = i; j < n; j += 1) {
+        const nx = encodeState(applyInversion(cur, i, j));
+        if (!dist.has(nx)) {
+          dist.set(nx, d + 1);
+          queue.push(nx);
+        }
+      }
+    }
+  }
+
+  const paths: InversionStep[][] = [];
+  const walk = (tokens: number[], path: InversionStep[]) => {
+    const code = encodeState(tokens);
+    if (code === goalCode) {
+      paths.push(path.slice());
+      return;
+    }
+    for (let i = 0; i < n; i += 1) {
+      for (let j = i; j < n; j += 1) {
+        const nx = applyInversion(tokens, i, j);
+        if (dist.get(encodeState(nx)) === dist.get(code)! + 1) {
+          path.push({ start: i + 1, end: j + 1 });
+          walk(nx, path);
+          path.pop();
+        }
+      }
+    }
+  };
+  walk(start, []);
+  return paths.sort((a, b) =>
+    lexicographicLess(a, b) ? -1 : lexicographicLess(b, a) ? 1 : 0,
+  );
+}
+
 describe('倒位操作语义', () => {
   it('反转区间次序并同时翻转每个符号', () => {
     // [1,-3,-2,4] 倒位 [2,3] -> [1, 2, 3, 4]
@@ -115,6 +166,128 @@ describe('需求用例 [1,-3,-2,4]', () => {
     expect(r.canonical.steps).toEqual([{ start: 2, end: 3 }]);
     expect(signedOf(r.canonical.states[1])).toEqual([1, 2, 3, 4]);
   });
+});
+
+describe('需求场景 [1,4,3,2]：恰两条最短方案', () => {
+  const r = solve(tokensOf([1, 4, 3, 2]));
+
+  it('距离 3、方案总数 2，规范轨迹依次 2-3 / 3-4 / 2-3', () => {
+    expect(r.distance).toBe(3);
+    expect(r.totalPaths).toBe(2n);
+    expect(r.canonical.steps).toEqual([
+      { start: 2, end: 3 },
+      { start: 3, end: 4 },
+      { start: 2, end: 3 },
+    ]);
+  });
+
+  it('完整方案集合还包含同长替代轨迹 3-4 / 2-3 / 3-4', () => {
+    expect(allShortestPaths([1, 4, 3, 2])).toEqual([
+      [
+        { start: 2, end: 3 },
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+      ],
+      [
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+        { start: 3, end: 4 },
+      ],
+    ]);
+  });
+
+  it('每一层只有区间 2-3 与 3-4 各计 1（some），其余区间均为 none', () => {
+    expect(r.matrix.length).toBe(3);
+    for (const layer of r.matrix) {
+      for (const cell of layer.intervals) {
+        const used =
+          (cell.start === 2 && cell.end === 3) ||
+          (cell.start === 3 && cell.end === 4);
+        if (used) {
+          expect(cell.pathCount).toBe(1n);
+          expect(cell.presence).toBe('some');
+        } else {
+          expect(cell.pathCount).toBe(0n);
+          expect(cell.presence).toBe('none');
+        }
+      }
+    }
+  });
+});
+
+describe('需求场景 [3,-1,-4,2]：多条最短前缀汇入相同步骤', () => {
+  const r = solve(tokensOf([3, -1, -4, 2]));
+
+  it('距离 3、方案总数 2，规范轨迹依次 1-2 / 3-4 / 2-3', () => {
+    expect(r.distance).toBe(3);
+    expect(r.totalPaths).toBe(2n);
+    expect(r.canonical.steps).toEqual([
+      { start: 1, end: 2 },
+      { start: 3, end: 4 },
+      { start: 2, end: 3 },
+    ]);
+  });
+
+  it('完整方案集合还包含同长替代轨迹 3-4 / 1-2 / 2-3', () => {
+    expect(allShortestPaths([3, -1, -4, 2])).toEqual([
+      [
+        { start: 1, end: 2 },
+        { start: 3, end: 4 },
+        { start: 2, end: 3 },
+      ],
+      [
+        { start: 3, end: 4 },
+        { start: 1, end: 2 },
+        { start: 2, end: 3 },
+      ],
+    ]);
+  });
+
+  it('第三层区间 2-3 计数为 2 且标 all；前两层 1-2 与 3-4 各计 1 标 some', () => {
+    expect(r.matrix.length).toBe(3);
+    for (const d of [0, 1]) {
+      for (const cell of r.matrix[d].intervals) {
+        const used =
+          (cell.start === 1 && cell.end === 2) ||
+          (cell.start === 3 && cell.end === 4);
+        expect(cell.pathCount).toBe(used ? 1n : 0n);
+        expect(cell.presence).toBe(used ? 'some' : 'none');
+      }
+    }
+    for (const cell of r.matrix[2].intervals) {
+      if (cell.start === 2 && cell.end === 3) {
+        expect(cell.pathCount).toBe(2n);
+        expect(cell.presence).toBe('all');
+      } else {
+        expect(cell.pathCount).toBe(0n);
+        expect(cell.presence).toBe('none');
+      }
+    }
+  });
+});
+
+describe('需求场景 [2,1,3,6,4,7,5]（七标记）', () => {
+  it(
+    '距离 8、最短方案总数 120174，矩阵每行计数之和均等于总数',
+    { timeout: 60000 },
+    () => {
+      const r = solve(tokensOf([2, 1, 3, 6, 4, 7, 5]));
+      expect(r.distance).toBe(8);
+      expect(r.totalPaths).toBe(120174n);
+      expect(r.matrix.length).toBe(8);
+      for (const layer of r.matrix) {
+        let sum = 0n;
+        for (const cell of layer.intervals) sum += cell.pathCount;
+        expect(sum).toBe(r.totalPaths);
+      }
+      // 规范轨迹本身必须可执行并到达全正顺序
+      let cur = tokensOf([2, 1, 3, 6, 4, 7, 5]);
+      for (const s of r.canonical.steps) {
+        cur = applyInversion(cur, s.start - 1, s.end - 1);
+      }
+      expect(signedOf(cur)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    },
+  );
 });
 
 describe('校验：合并反馈且拒绝非法排列', () => {
